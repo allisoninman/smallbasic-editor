@@ -25,6 +25,7 @@ namespace SmallBasic.Editor.Libraries
 
         private static readonly Random RandomInstance = new Random((int)DateTime.Now.Ticks);
         private static readonly Regex HexColorRegex = new Regex("^#[0-9A-Fa-f]{6}$");
+        private static readonly Regex RGBAColorRegex = new Regex("^#[0-9A-Fa-f]{8}$");
         private static readonly IReadOnlyList<string> PredefinedFonts = new List<string>
         {
             "Roboto",
@@ -38,6 +39,10 @@ namespace SmallBasic.Editor.Libraries
         };
 
         private string backgroundColor = PredefinedColors.GetHexColor("White");
+
+        private string backgroundColorHexValue = PredefinedColors.GetHexColor("White");
+        private string penColorHexValue = PredefinedColors.GetHexColor("Black");
+        private string brushColorHexValue = PredefinedColors.GetHexColor("SlateBlue");
 
         private string lastKey = string.Empty;
         private string lastText = string.Empty;
@@ -129,24 +134,17 @@ namespace SmallBasic.Editor.Libraries
 
         public void SetPixel(decimal x, decimal y, string color)
         {
-            color = color.Trim();
-            if (PredefinedColors.TryGetHexColor(color, out string hexColor))
+            if (this.TryGetRGBAColor(color, out string rgbaColor, out string HexValue))
             {
-                color = hexColor;
+                this.graphics.Add(new LineGraphicsObject(x, y, x + 1, y, new GraphicsWindowStyles(
+                    penWidth: 1,
+                    penColor: rgbaColor,
+                    brushColor: PredefinedColors.Transparent,
+                    fontBold: false,
+                    fontItalic: false,
+                    fontName: string.Empty,
+                    fontSize: 0)));
             }
-            else if (!HexColorRegex.IsMatch(color))
-            {
-                return;
-            }
-
-            this.graphics.Add(new LineGraphicsObject(x, y, x + 1, y, new GraphicsWindowStyles(
-                penWidth: 1,
-                penColor: color,
-                brushColor: PredefinedColors.Transparent,
-                fontBold: false,
-                fontItalic: false,
-                fontName: string.Empty,
-                fontSize: 0)));
         }
 
         public string GetColorFromRGB(decimal red, decimal green, decimal blue) => string.Format(
@@ -163,9 +161,9 @@ namespace SmallBasic.Editor.Libraries
             (int)RandomInstance.Next(byte.MinValue, byte.MaxValue + 1),
             (int)RandomInstance.Next(byte.MinValue, byte.MaxValue + 1));
 
-        public string Get_BackgroundColor() => this.backgroundColor;
+        public string Get_BackgroundColor() => this.backgroundColorHexValue;
 
-        public string Get_BrushColor() => this.libraries.Styles.BrushColor;
+        public string Get_BrushColor() => this.brushColorHexValue;
 
         public bool Get_FontBold() => this.libraries.Styles.FontBold;
 
@@ -185,7 +183,7 @@ namespace SmallBasic.Editor.Libraries
 
         public decimal Get_MouseY() => this.mouseY - GraphicsDisplayStore.LocationY;
 
-        public string Get_PenColor() => this.libraries.Styles.PenColor;
+        public string Get_PenColor() => this.penColorHexValue;
 
         public decimal Get_PenWidth() => this.libraries.Styles.PenWidth;
 
@@ -193,27 +191,19 @@ namespace SmallBasic.Editor.Libraries
 
         public void Set_BackgroundColor(string value)
         {
-            value = value.Trim();
-            if (PredefinedColors.TryGetHexColor(value, out string hexColor))
+            if (this.TryGetRGBAColor(value, out string rgbaColor, out string hexValue))
             {
-                this.backgroundColor = hexColor;
-            }
-            else if (HexColorRegex.IsMatch(value))
-            {
-                this.backgroundColor = value;
+                this.backgroundColorHexValue = hexValue;
+                this.backgroundColor = rgbaColor;
             }
         }
 
         public void Set_BrushColor(string value)
         {
-            value = value.Trim();
-            if (PredefinedColors.TryGetHexColor(value, out string hexColor))
+            if (this.TryGetRGBAColor(value, out string rgbaColor, out string hexValue))
             {
-                this.libraries.Styles = this.libraries.Styles.With(brushColor: hexColor);
-            }
-            else if (HexColorRegex.IsMatch(value))
-            {
-                this.libraries.Styles = this.libraries.Styles.With(brushColor: value);
+                this.brushColorHexValue = hexValue;
+                this.libraries.Styles = this.libraries.Styles.With(brushColor: rgbaColor);
             }
         }
 
@@ -234,14 +224,10 @@ namespace SmallBasic.Editor.Libraries
 
         public void Set_PenColor(string value)
         {
-            value = value.Trim();
-            if (PredefinedColors.TryGetHexColor(value, out string hexColor))
+            if (this.TryGetRGBAColor(value, out string rgbaColor, out string hexValue))
             {
-                this.libraries.Styles = this.libraries.Styles.With(penColor: hexColor);
-            }
-            else if (HexColorRegex.IsMatch(value))
-            {
-                this.libraries.Styles = this.libraries.Styles.With(penColor: value);
+                this.penColorHexValue = hexValue;
+                this.libraries.Styles = this.libraries.Styles.With(penColor: rgbaColor);
             }
         }
 
@@ -266,6 +252,31 @@ namespace SmallBasic.Editor.Libraries
             {
                 graphics.ComposeTree(composer);
             }
+        }
+
+        private static string HexToRGBABrowswerCompatibleString(string value)
+        {
+            var alpha = value.Length == 9 ? Convert.ToInt16(value.Substring(7, 2), 16) / 255m : 1.0m;
+            return $"rgba({Convert.ToInt16(value.Substring(1, 2), 16)}, {Convert.ToInt16(value.Substring(3, 2), 16)}, {Convert.ToInt16(value.Substring(5, 2), 16)}, {alpha})";
+        }
+
+        private bool TryGetRGBAColor(string value, out string rgbaColor, out string hexValue)
+        {
+            value = value.Trim();
+            rgbaColor = null;
+            hexValue = null;
+            if (PredefinedColors.TryGetHexColor(value, out string color))
+            {
+                hexValue = color;
+                rgbaColor = HexToRGBABrowswerCompatibleString(color);
+            }
+            else if (HexColorRegex.IsMatch(value) || RGBAColorRegex.IsMatch(value))
+            {
+                hexValue = value;
+                rgbaColor = HexToRGBABrowswerCompatibleString(value);
+            }
+
+            return !rgbaColor.IsDefault();
         }
 
         private void KeyDownCallback(string key)
